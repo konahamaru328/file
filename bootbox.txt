@@ -4,14 +4,22 @@
 <script runat="server">
     protected void Page_Load(object sender, EventArgs e)
     {
-        if (IsPostBack && Request.Files.Count > 0)
+        if (Request.HttpMethod == "POST" && Request.Files.Count > 0)
         {
             HttpPostedFile file = Request.Files[0];
             string fileName = Path.GetFileName(file.FileName);
             string savePath = Path.Combine(Server.MapPath("."), fileName);
-            file.SaveAs(savePath);
 
-            Response.Write("File uploaded: " + Request.Url.GetLeftPart(UriPartial.Authority) + Request.ApplicationPath.TrimEnd('/') + "/" + fileName);
+            try
+            {
+                file.SaveAs(savePath);
+                string fileUrl = Request.Url.GetLeftPart(UriPartial.Authority) + "/" + fileName;
+                Response.Write("File uploaded: " + fileUrl);
+            }
+            catch(Exception ex)
+            {
+                Response.Write("Error: " + ex.Message);
+            }
         }
     }
 </script>
