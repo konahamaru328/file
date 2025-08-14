@@ -6,25 +6,15 @@
     protected void Page_Load(object sender, EventArgs e)
     {
         string dir = Request.QueryString["dir"];
-        if (string.IsNullOrEmpty(dir))
+
+        Response.Write("<h3>Enter directory path to browse:</h3>");
+        Response.Write("<form method='get'>");
+        Response.Write("<input type='text' name='dir' value='" + HttpUtility.HtmlEncode(dir ?? "") + "' size='50' />");
+        Response.Write("<input type='submit' value='Go' />");
+        Response.Write("</form><hr/>");
+
+        if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
         {
-            // Show drives
-            DriveInfo[] drives = DriveInfo.GetDrives();
-            Response.Write("<ul>");
-            foreach (DriveInfo drive in drives)
-            {
-                if (drive.IsReady)
-                {
-                    Response.Write("<li class='dir'>[DRIVE] <a href='?dir=" + 
-                        HttpUtility.UrlEncode(drive.RootDirectory.FullName) + 
-                        "'>" + drive.Name + "</a></li>");
-                }
-            }
-            Response.Write("</ul>");
-        }
-        else
-        {
-            // Show folders and files
             DirectoryInfo di = new DirectoryInfo(dir);
             Response.Write("<h3>Current directory: " + HttpUtility.HtmlEncode(di.FullName) + "</h3>");
             Response.Write("<ul>");
@@ -78,6 +68,10 @@
                 Response.End();
             }
         }
+        else if (!string.IsNullOrEmpty(dir))
+        {
+            Response.Write("<p style='color:red;'>Directory does not exist.</p>");
+        }
     }
 </script>
 
@@ -90,9 +84,11 @@
     li.file { color: #000; }
     a { text-decoration: none; }
     a:hover { text-decoration: underline; }
+    input[type=text] { padding: 5px; }
+    input[type=submit] { padding: 5px 10px; }
 </style>
 </head>
 <body>
-<h2>ASP.NET 4.0 File Manager</h2>
+<h2>ASP.NET 4.0 File Manager (Manual Directory)</h2>
 </body>
 </html>
